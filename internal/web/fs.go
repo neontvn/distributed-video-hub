@@ -33,37 +33,66 @@ func (f *FSVideoContentService) Write(videoId string, filename string, data []by
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	tempInputFile := filepath.Join(videoDir, filename)
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+	tempDir := filepath.Join(projectRoot, "video-upload-"+videoId)
+	err = os.Mkdir(tempDir, 0755)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tempInputFile := filepath.Join(tempDir, filename)
 	err = os.WriteFile(tempInputFile, data, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write input file: %w", err)
 	}
-	defer os.Remove(tempInputFile)
 
-	manifestPath := filepath.Join(videoDir, "manifest.mpd")
+	tempManifestPath := filepath.Join(tempDir, "manifest.mpd")
 
 	cmd := exec.Command(
 		"ffmpeg",
-		"-i", tempInputFile, // Input file
-		"-c:v", "libx264", // Video codec
-		"-c:a", "aac", // Audio codec
-		"-bf", "1", // Max 1 B-frame
-		"-keyint_min", "120", // Minimum keyframe interval
-		"-g", "120", // Keyframe every 120 frames
-		"-sc_threshold", "0", // Scene change threshold
-		"-b:v", "3000k", // Video bitrate
-		"-b:a", "128k", // Audio bitrate
-		"-f", "dash", // DASH format
-		"-use_timeline", "1", // Use timeline
-		"-use_template", "1", // Use template
-		"-init_seg_name", "init-$RepresentationID$.m4s", // Init segment naming
-		"-media_seg_name", "chunk-$RepresentationID$-$Number%05d$.m4s", // Media segment naming
-		"-seg_duration", "4", // Segment duration in seconds
-		manifestPath, // Output manifest file
+		"-i", tempInputFile,
+		"-c:v", "libx264",
+		"-c:a", "aac",
+		"-bf", "1",
+		"-keyint_min", "120",
+		"-g", "120",
+		"-sc_threshold", "0",
+		"-b:v", "3000k",
+		"-b:a", "128k",
+		"-f", "dash",
+		"-use_timeline", "1",
+		"-use_template", "1",
+		"-init_seg_name", "init-$RepresentationID$.m4s",
+		"-media_seg_name", "chunk-$RepresentationID$-$Number%05d$.m4s",
+		"-seg_duration", "4",
+		tempManifestPath,
 	)
+	cmd.Dir = tempDir
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute ffmpeg command: %w", err)
+	}
+
+	err = os.Remove(tempInputFile)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete temp input file: %w", err)
+	}
+
+	files, err := os.ReadDir(tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to read temp directory: %w", err)
+	}
+	for _, file := range files {
+		src := filepath.Join(tempDir, file.Name())
+		dst := filepath.Join(videoDir, file.Name())
+		err := os.Rename(src, dst)
+		if err != nil {
+			return fmt.Errorf("failed to move file %s: %w", file.Name(), err)
+		}
 	}
 
 	return nil

@@ -3,6 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"math"
+	"net"
+	"tritontube/internal/proto"
+	"tritontube/internal/storage"
+
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -27,5 +34,22 @@ func main() {
 	fmt.Printf("Port: %d\n", *port)
 	fmt.Printf("Base Directory: %s\n", baseDir)
 
-	panic("Lab 8: not implemented")
+	addr := fmt.Sprintf("%s:%d", *host, *port)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	// Set maximum possible message size limits for the gRPC server
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(math.MaxInt32),
+		grpc.MaxSendMsgSize(math.MaxInt32),
+	)
+	storageServer := storage.NewStorageServer(baseDir, *port)
+	proto.RegisterVideoContentStorageServiceServer(grpcServer, storageServer)
+
+	fmt.Printf("Storage server listening on %s\n", addr)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	}
 }

@@ -10,11 +10,11 @@ import (
 )
 
 type SQLiteVideoMetadataService struct {
-	Db string
+	Instance *sql.DB
 }
 
-func (s *SQLiteVideoMetadataService) ensureTable(dbInstance *sql.DB) error {
-	_, err := dbInstance.Exec(`
+func (s *SQLiteVideoMetadataService) ensureTable() error {
+	_, err := s.Instance.Exec(`
         CREATE TABLE IF NOT EXISTS videos (
             id TEXT PRIMARY KEY,
             uploaded_at DATETIME
@@ -25,19 +25,11 @@ func (s *SQLiteVideoMetadataService) ensureTable(dbInstance *sql.DB) error {
 
 // Create implements VideoMetadataService.
 func (s *SQLiteVideoMetadataService) Create(videoId string, uploadedAt time.Time) error {
-	dbInstance, err := sql.Open("sqlite3", s.Db)
-	if err != nil {
-		return err
-	}
-	defer dbInstance.Close()
-
-	if err := s.ensureTable(dbInstance); err != nil {
+	if err := s.ensureTable(); err != nil {
 		return err
 	}
 
-	_, err = dbInstance.Exec(`
-        INSERT INTO videos (id, uploaded_at) VALUES (?, ?)
-    `, videoId, uploadedAt)
+	_, err := s.Instance.Exec(`INSERT INTO videos (id, uploaded_at) VALUES (?, ?)`, videoId, uploadedAt)
 	if err != nil {
 		return err
 	}
@@ -47,17 +39,11 @@ func (s *SQLiteVideoMetadataService) Create(videoId string, uploadedAt time.Time
 
 // List implements VideoMetadataService.
 func (s *SQLiteVideoMetadataService) List() ([]VideoMetadata, error) {
-	dbInstance, err := sql.Open("sqlite3", s.Db)
-	if err != nil {
-		return nil, err
-	}
-	defer dbInstance.Close()
-
-	if err := s.ensureTable(dbInstance); err != nil {
+	if err := s.ensureTable(); err != nil {
 		return nil, err
 	}
 
-	rows, err := dbInstance.Query("SELECT id, uploaded_at FROM videos")
+	rows, err := s.Instance.Query("SELECT id, uploaded_at FROM videos")
 	if err != nil {
 		return nil, err
 	}
@@ -77,18 +63,13 @@ func (s *SQLiteVideoMetadataService) List() ([]VideoMetadata, error) {
 
 // Read implements VideoMetadataService.
 func (s *SQLiteVideoMetadataService) Read(id string) (*VideoMetadata, error) {
-	dbInstance, err := sql.Open("sqlite3", s.Db)
-	if err != nil {
-		return nil, err
-	}
-	defer dbInstance.Close()
 
-	if err := s.ensureTable(dbInstance); err != nil {
+	if err := s.ensureTable(); err != nil {
 		return nil, err
 	}
 
 	var video VideoMetadata
-	err = dbInstance.QueryRow("SELECT id, uploaded_at FROM videos WHERE id = ?", id).Scan(&video.Id, &video.UploadedAt)
+	err := s.Instance.QueryRow("SELECT id, uploaded_at FROM videos WHERE id = ?", id).Scan(&video.Id, &video.UploadedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
