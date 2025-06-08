@@ -1,0 +1,7 @@
+.git
+.gitignore
+.DS_Store
+*.test
+/storage/
+/data/
+*.db 

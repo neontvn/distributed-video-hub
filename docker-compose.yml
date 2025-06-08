@@ -1,0 +1,47 @@
+services:
+  storage1:
+    build: .
+    command: /app/storage-server -host storage1 -port 8090 /app/storage/8090
+    volumes:
+      - storage_data:/app/storage
+    networks:
+      - tritontube_net
+
+  storage2:
+    build: .
+    command: /app/storage-server -host storage2 -port 8091 /app/storage/8091
+    volumes:
+      - storage_data:/app/storage
+    networks:
+      - tritontube_net
+
+  storage3:
+    build: .
+    command: /app/storage-server -host storage3 -port 8092 /app/storage/8092
+    volumes:
+      - storage_data:/app/storage
+    networks:
+      - tritontube_net
+
+  web:
+    build: .
+    command: /app/web-server -host 0.0.0.0 sqlite /app/data/metadata.db nw "web:8081,storage1:8090,storage2:8091,storage3:8092"
+    ports:
+      - "8080:8080"
+    volumes:
+      - storage_data:/app/storage
+      - db_data:/app/data
+    depends_on:
+      - storage1
+      - storage2
+      - storage3
+    networks:
+      - tritontube_net
+
+volumes:
+  storage_data:
+  db_data:
+
+networks:
+  tritontube_net:
+    driver: bridge 
