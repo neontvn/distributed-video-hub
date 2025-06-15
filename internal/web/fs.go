@@ -50,6 +50,20 @@ func (f *FSVideoContentService) Write(videoId string, filename string, data []by
 		return fmt.Errorf("failed to write input file: %w", err)
 	}
 
+	tempThumbnailPath := filepath.Join(tempDir, "thumbnail.jpg")
+	thumbnailCmd := exec.Command(
+		"ffmpeg",
+		"-i", tempInputFile,
+		"-ss", "00:00:01", // Take frame at 1 second
+		"-vframes", "1", // Take only one frame
+		"-q:v", "2", // High quality
+		"-y", // Overwrite output file if it exists
+		tempThumbnailPath,
+	)
+	if err := thumbnailCmd.Run(); err != nil {
+		return fmt.Errorf("failed to generate thumbnail: %w", err)
+	}
+
 	tempManifestPath := filepath.Join(tempDir, "manifest.mpd")
 
 	cmd := exec.Command(
@@ -96,6 +110,49 @@ func (f *FSVideoContentService) Write(videoId string, filename string, data []by
 	}
 
 	return nil
+}
+
+// Delete implements VideoContentService.
+func (f *FSVideoContentService) Delete(videoId string, filename string) error {
+	filePath := filepath.Join(f.BaseDir, videoId, filename)
+	err := os.Remove(filePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	videoDir := filepath.Join(f.BaseDir, videoId)
+	files, err := os.ReadDir(videoDir)
+	if err != nil {
+		return fmt.Errorf("failed to read video directory: %w", err)
+	}
+	if len(files) == 0 {
+		err = os.Remove(videoDir)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove video directory: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ListFiles implements VideoContentService.
+func (f *FSVideoContentService) ListFiles(videoId string) ([]string, error) {
+	videoDir := filepath.Join(f.BaseDir, videoId)
+	entries, err := os.ReadDir(videoDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read video directory: %w", err)
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files = append(files, entry.Name())
+		}
+	}
+	return files, nil
 }
 
 // Uncomment the following line to ensure FSVideoContentService implements VideoContentService

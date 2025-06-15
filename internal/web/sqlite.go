@@ -4,6 +4,7 @@ package web
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -78,6 +79,20 @@ func (s *SQLiteVideoMetadataService) Read(id string) (*VideoMetadata, error) {
 	}
 
 	return &video, nil
+}
+
+// Delete implements VideoMetadataService.
+func (s *SQLiteVideoMetadataService) Delete(id string) error {
+	if err := s.ensureTable(); err != nil {
+		return err
+	}
+
+	_, err := s.Instance.Exec("DELETE FROM videos WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete video metadata: %w", err)
+	}
+
+	return nil
 }
 
 // Uncomment the following line to ensure SQLiteVideoMetadataService implements VideoMetadataService

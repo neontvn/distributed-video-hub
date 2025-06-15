@@ -444,6 +444,21 @@ func (n *NetworkVideoContentService) Write(videoId string, filename string, data
 		return fmt.Errorf("failed to execute ffmpeg command: %w", err)
 	}
 
+	// Generate thumbnail
+	tempThumbnailPath := filepath.Join(tempDir, "thumbnail.jpg")
+	thumbnailCmd := exec.Command(
+		"ffmpeg",
+		"-i", tempInputFile,
+		"-ss", "00:00:01", // Take frame at 1 second
+		"-vframes", "1", // Take only one frame
+		"-q:v", "2", // High quality
+		"-y", // Overwrite output file if it exists
+		tempThumbnailPath,
+	)
+	if err := thumbnailCmd.Run(); err != nil {
+		return fmt.Errorf("failed to generate thumbnail: %w", err)
+	}
+
 	err = os.Remove(tempInputFile)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete temp input file: %w", err)
@@ -508,6 +523,29 @@ func (n *NetworkVideoContentService) writeToStorageServer(videoId string, filena
 	return nil
 }
 
-// Ensure NetworkVideoContentService implements both interfaces
+// Delete implements VideoContentService.
+func (n *NetworkVideoContentService) Delete(videoId string, filename string) error {
+	server := n.getServerForKey(videoId, filename)
+	return n.deleteFileFromServer(videoId, filename, server)
+}
+
+// ListFiles implements VideoContentService.
+func (n *NetworkVideoContentService) ListFiles(videoId string) ([]string, error) {
+	allFiles, err := n.getAllFiles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all files: %w", err)
+	}
+
+	var files []string
+	for _, serverFiles := range allFiles {
+		for _, file := range serverFiles {
+			if file.VideoId == videoId {
+				files = append(files, file.Filename)
+			}
+		}
+	}
+	return files, nil
+}
+
 var _ VideoContentService = (*NetworkVideoContentService)(nil)
 var _ proto.VideoContentAdminServiceServer = (*NetworkVideoContentService)(nil)

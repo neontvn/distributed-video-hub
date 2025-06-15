@@ -40,6 +40,7 @@ func (s *server) Start(lis net.Listener) error {
 	s.mux.HandleFunc("/upload", s.handleUpload)
 	s.mux.HandleFunc("/videos/", s.handleVideo)
 	s.mux.HandleFunc("/content/", s.handleVideoContent)
+	s.mux.HandleFunc("/delete/", s.handleDelete)
 	s.mux.HandleFunc("/", s.handleIndex)
 
 	return http.Serve(lis, s.mux)
@@ -206,9 +207,75 @@ func (s *server) handleVideoContent(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/dash+xml")
 	} else if strings.HasSuffix(filename, ".mp4") {
 		w.Header().Set("Content-Type", "video/mp4")
+	} else if strings.HasSuffix(filename, ".jpg") {
+		w.Header().Set("Content-Type", "image/jpeg")
 	}
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
 
+}
+
+func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	videoId := r.URL.Path[len("/delete/"):]
+	if videoId == "" {
+		http.Error(w, "Video ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// First check if video exists
+	video, err := s.metadataService.Read(videoId)
+	if err != nil {
+		http.Error(w, "Error checking video existence", http.StatusInternalServerError)
+		log.Println("Error checking video:", err)
+		return
+	}
+	if video == nil {
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	}
+
+	err = s.metadataService.Delete(videoId)
+	if err != nil {
+		http.Error(w, "Error deleting video metadata", http.StatusInternalServerError)
+		log.Println("Error deleting metadata:", err)
+		return
+	}
+
+	files, err := s.contentService.ListFiles(videoId)
+	if err != nil {
+		log.Printf("Warning: Could not list files for video %s: %v", videoId, err)
+		files = []string{"manifest.mpd", "thumbnail.jpg"}
+		files = append(files, "init-0.m4s", "init-1.m4s")
+		for stream := 0; stream <= 1; stream++ {
+			for i := 1; i <= 100; i++ {
+				files = append(files, fmt.Sprintf("chunk-%d-%05d.m4s", stream, i))
+			}
+		}
+	}
+
+	// Delete each file
+	var deleteErrors []error
+	for _, filename := range files {
+		err := s.contentService.Delete(videoId, filename)
+		if err != nil {
+			if !strings.Contains(err.Error(), "no such file") {
+				log.Printf("Error deleting file %s: %v", filename, err)
+				deleteErrors = append(deleteErrors, err)
+			}
+		}
+	}
+
+	if len(deleteErrors) > 0 {
+		http.Error(w, "Error deleting some video files", http.StatusInternalServerError)
+		log.Printf("Errors deleting files for video %s: %v", videoId, deleteErrors)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
