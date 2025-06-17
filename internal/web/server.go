@@ -3,13 +3,12 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,212 +36,256 @@ func NewServer(
 
 func (s *server) Start(lis net.Listener) error {
 	s.mux = http.NewServeMux()
-	s.mux.HandleFunc("/upload", s.handleUpload)
-	s.mux.HandleFunc("/videos/", s.handleVideo)
-	s.mux.HandleFunc("/content/", s.handleVideoContent)
-	s.mux.HandleFunc("/delete/", s.handleDelete)
-	s.mux.HandleFunc("/", s.handleIndex)
+
+	// API endpoints for Next.js
+	s.mux.HandleFunc("/api/videos", s.handleAPIVideos)
+	s.mux.HandleFunc("/api/videos/", s.handleAPIVideo)
+	s.mux.HandleFunc("/api/upload", s.handleAPIUpload)
+	s.mux.HandleFunc("/api/delete/", s.handleAPIDelete)
+	s.mux.HandleFunc("/api/content/", s.handleAPIVideoContent)
+
+	// CORS middleware for all API routes
+	s.mux.HandleFunc("/", s.handleCORS)
 
 	return http.Serve(lis, s.mux)
 }
 
-func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
+// API Response structures
+type APIResponse struct {
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+type VideoAPIResponse struct {
+	Id         string `json:"id"`
+	UploadedAt string `json:"uploadedAt"`
+}
+
+type UploadAPIResponse struct {
+	VideoId string `json:"videoId"`
+}
+
+// Helper function to send JSON responses
+func sendJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data)
+}
+
+// Helper function to send error responses
+func sendErrorResponse(w http.ResponseWriter, statusCode int, message string) {
+	sendJSONResponse(w, statusCode, APIResponse{
+		Success: false,
+		Error:   message,
+	})
+}
+
+// CORS handler for all routes
+func (s *server) handleCORS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// If not OPTIONS, return 404 for unknown routes
+	sendErrorResponse(w, http.StatusNotFound, "Endpoint not found")
+}
+
+// API endpoint: GET /api/videos - List all videos
+func (s *server) handleAPIVideos(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
 
 	videos, err := s.metadataService.List()
 	if err != nil {
-		http.Error(w, "Error fetching video metadata", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error fetching video metadata")
 		log.Println("Metadata service error:", err)
 		return
 	}
 
-	type VideoData struct {
-		Id         string
-		EscapedId  string
-		UploadTime string
-	}
-
-	var videoData []VideoData
+	var videoResponses []VideoAPIResponse
 	for _, video := range videos {
-		videoData = append(videoData, VideoData{
+		videoResponses = append(videoResponses, VideoAPIResponse{
 			Id:         video.Id,
-			EscapedId:  url.PathEscape(video.Id),
-			UploadTime: video.UploadedAt.Format("2006-01-02 15:04:05"),
+			UploadedAt: video.UploadedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
-	tmpl, err := template.New("index").Parse(indexHTML)
-	if err != nil {
-		http.Error(w, "Error parsing template", http.StatusInternalServerError)
-		log.Println("Parse error:", err)
+	sendJSONResponse(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data:    videoResponses,
+	})
+}
+
+// API endpoint: GET /api/videos/{videoId} - Get specific video
+func (s *server) handleAPIVideo(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	err = tmpl.Execute(w, videoData)
-	if err != nil {
-		http.Error(w, "Error executing template", http.StatusInternalServerError)
-		log.Println("Execute error:", err)
+	if r.Method != http.MethodGet {
+		sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
+
+	videoId := r.URL.Path[len("/api/videos/"):]
+	if videoId == "" {
+		sendErrorResponse(w, http.StatusBadRequest, "Video ID is required")
+		return
+	}
+
+	video, err := s.metadataService.Read(videoId)
+	if err != nil || video == nil {
+		sendErrorResponse(w, http.StatusNotFound, "Video not found")
+		return
+	}
+
+	videoResponse := VideoAPIResponse{
+		Id:         video.Id,
+		UploadedAt: video.UploadedAt.Format("2006-01-02 15:04:05"),
+	}
+
+	sendJSONResponse(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data:    videoResponse,
+	})
 }
 
-func generateVideoID(filename string) string {
-	return fmt.Sprintf("%s", strings.TrimSuffix(filename, filepath.Ext(filename)))
-}
+// API endpoint: POST /api/upload - Upload video
+func (s *server) handleAPIUpload(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	err := r.ParseMultipartForm(0)
 	if err != nil {
-		http.Error(w, "Error parsing form data", http.StatusBadRequest)
+		sendErrorResponse(w, http.StatusBadRequest, "Error parsing form data")
 		log.Println("Error parsing form data", err)
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "Error retrieving file", http.StatusBadRequest)
+		sendErrorResponse(w, http.StatusBadRequest, "Error retrieving file")
 		log.Println("Error retrieving file", err)
 		return
 	}
-
 	defer file.Close()
 
 	videoID := generateVideoID(header.Filename)
 
 	existing, err := s.metadataService.Read(videoID)
 	if err != nil {
-		http.Error(w, "Error checking for existing video", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error checking for existing video")
 		log.Println("Error checking for existing video:", err)
 		return
 	}
 	if existing != nil {
-		http.Error(w, "Video ID already exists", http.StatusConflict)
+		sendErrorResponse(w, http.StatusConflict, "Video ID already exists")
 		return
 	}
 
 	filedata, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, "Error reading file content", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error reading file content")
 		log.Println("Error reading file content: ", err)
 		return
 	}
 
 	err = s.metadataService.Create(videoID, time.Now())
 	if err != nil {
-		http.Error(w, "Error in saving metadata", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error in saving metadata")
 		log.Println("Error in saving metadata:", err)
 		return
 	}
 
 	err = s.contentService.Write(videoID, header.Filename, filedata)
 	if err != nil {
-		http.Error(w, "Error saving file to content service", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error saving file to content service")
 		log.Println("Content service write error:", err)
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	sendJSONResponse(w, http.StatusCreated, APIResponse{
+		Success: true,
+		Data: UploadAPIResponse{
+			VideoId: videoID,
+		},
+	})
 }
 
-func (s *server) handleVideo(w http.ResponseWriter, r *http.Request) {
-	videoId := r.URL.Path[len("/videos/"):]
-	log.Println("Video ID:", videoId)
+// API endpoint: DELETE /api/delete/{videoId} - Delete video
+func (s *server) handleAPIDelete(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	video, err := s.metadataService.Read(videoId)
-	if err != nil || video == nil {
-		http.Error(w, "Video not found", http.StatusNotFound)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	type VideoData struct {
-		Id         string
-		UploadedAt string
-	}
-
-	data := VideoData{
-		Id:         video.Id,
-		UploadedAt: video.UploadedAt.Format("2006-01-02 15:04:05"),
-	}
-
-	tmpl, err := template.New("video").Parse(videoHTML)
-	if err != nil {
-		http.Error(w, "Error parsing template", http.StatusInternalServerError)
-		log.Println("Parse error:", err)
+	if r.Method != http.MethodDelete {
+		sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, "Error executing template", http.StatusInternalServerError)
-		log.Println("Execute error:", err)
-		return
-	}
-}
-
-func (s *server) handleVideoContent(w http.ResponseWriter, r *http.Request) {
-	// parse /content/<videoId>/<filename>
-	videoId := r.URL.Path[len("/content/"):]
-	parts := strings.Split(videoId, "/")
-	if len(parts) != 2 {
-		http.Error(w, "Invalid content path", http.StatusBadRequest)
-		return
-	}
-	videoId = parts[0]
-	filename := parts[1]
-	log.Println("Video ID:", videoId, "Filename:", filename)
-
-	content, err := s.contentService.Read(videoId, filename)
-	if err != nil {
-		http.Error(w, "Error reading video content", http.StatusInternalServerError)
-		log.Println("Content service read error:", err)
-		return
-	}
-
-	// Optionally set Content-Type based on filename
-	if strings.HasSuffix(filename, ".mpd") {
-		w.Header().Set("Content-Type", "application/dash+xml")
-	} else if strings.HasSuffix(filename, ".mp4") {
-		w.Header().Set("Content-Type", "video/mp4")
-	} else if strings.HasSuffix(filename, ".jpg") {
-		w.Header().Set("Content-Type", "image/jpeg")
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
-
-}
-
-func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	videoId := r.URL.Path[len("/delete/"):]
+	videoId := r.URL.Path[len("/api/delete/"):]
 	if videoId == "" {
-		http.Error(w, "Video ID is required", http.StatusBadRequest)
+		sendErrorResponse(w, http.StatusBadRequest, "Video ID is required")
 		return
 	}
 
 	// First check if video exists
 	video, err := s.metadataService.Read(videoId)
 	if err != nil {
-		http.Error(w, "Error checking video existence", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error checking video existence")
 		log.Println("Error checking video:", err)
 		return
 	}
 	if video == nil {
-		http.Error(w, "Video not found", http.StatusNotFound)
+		sendErrorResponse(w, http.StatusNotFound, "Video not found")
 		return
 	}
 
 	err = s.metadataService.Delete(videoId)
 	if err != nil {
-		http.Error(w, "Error deleting video metadata", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error deleting video metadata")
 		log.Println("Error deleting metadata:", err)
 		return
 	}
@@ -272,10 +315,67 @@ func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(deleteErrors) > 0 {
-		http.Error(w, "Error deleting some video files", http.StatusInternalServerError)
+		sendErrorResponse(w, http.StatusInternalServerError, "Error deleting some video files")
 		log.Printf("Errors deleting files for video %s: %v", videoId, deleteErrors)
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	sendJSONResponse(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data:    map[string]string{"message": "Video deleted successfully"},
+	})
+}
+
+// API endpoint: GET /api/content/{videoId}/{filename} - Serve video content
+func (s *server) handleAPIVideoContent(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// parse /api/content/<videoId>/<filename>
+	contentPath := r.URL.Path[len("/api/content/"):]
+	parts := strings.Split(contentPath, "/")
+	if len(parts) != 2 {
+		sendErrorResponse(w, http.StatusBadRequest, "Invalid content path")
+		return
+	}
+	videoId := parts[0]
+	filename := parts[1]
+	log.Println("Video ID:", videoId, "Filename:", filename)
+
+	content, err := s.contentService.Read(videoId, filename)
+	if err != nil {
+		sendErrorResponse(w, http.StatusInternalServerError, "Error reading video content")
+		log.Println("Content service read error:", err)
+		return
+	}
+
+	// Set appropriate Content-Type based on filename
+	if strings.HasSuffix(filename, ".mpd") {
+		w.Header().Set("Content-Type", "application/dash+xml")
+	} else if strings.HasSuffix(filename, ".mp4") {
+		w.Header().Set("Content-Type", "video/mp4")
+	} else if strings.HasSuffix(filename, ".jpg") {
+		w.Header().Set("Content-Type", "image/jpeg")
+	} else if strings.HasSuffix(filename, ".m4s") {
+		w.Header().Set("Content-Type", "video/mp4")
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+func generateVideoID(filename string) string {
+	return fmt.Sprintf("%s", strings.TrimSuffix(filename, filepath.Ext(filename)))
 }
