@@ -21,7 +21,7 @@ export default function Navigation({ showBackButton = false }: NavigationProps) 
               </Link>
             ) : null}
             <Link href="/" className="flex items-center">
-              <h1 className="text-xl font-bold text-white-800  ml-2">TritonTube</h1>
+              <h1 className="text-xl font-bold text-white-800  ml-2">Distributed Video Hub (Beta)</h1>
             </Link>
           </div>
         </div>
