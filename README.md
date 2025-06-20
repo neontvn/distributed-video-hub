@@ -1,131 +1,112 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/cdomgBmc)
+# Distributed Video Hub
 
-# TritonTube Next.js Frontend
-
-This is a Next.js frontend that recreates the exact same UI as the original TritonTube Go application. It communicates with the Go backend API to provide a modern, responsive video streaming interface.
+A distributed video streaming and sharing platform built with Next.js frontend and Go backend.
 
 ## Features
 
-- **Exact UI Recreation**: 100% pixel-perfect recreation of the original TritonTube interface
+- **Video Upload**: Drag-and-drop or click-to-browse file upload
+- **Video Streaming**: DASH.js powered video player with adaptive streaming
+- **Video Management**: Upload, view, and delete videos
 - **Dark Mode Support**: Toggle between light and dark themes
-- **Video Upload**: Drag-and-drop or click-to-browse file upload with 10MB limit
-- **Video Grid**: Responsive grid layout showing all uploaded videos
-- **Video Player**: DASH.js powered video player with adaptive streaming
-- **Delete Functionality**: Delete videos with confirmation dialogs
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
 
 ## Prerequisites
 
-- Node.js 18+ 
-- The Go backend server running on `localhost:8080`
+- Node.js 18+
+- Go 1.21+
+- Docker and Docker Compose (optional, for easy setup)
 
-## Installation
+## Quick Start (Using Docker)
 
-1. Install dependencies:
-```bash
-npm install
-```
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd distributed-video-hub
+   ```
 
-2. Make sure the Go backend is running on `localhost:8080`
+2. **Start all services with Docker Compose**:
+   ```bash
+   docker-compose up -d
+   ```
 
-3. Start the development server:
-```bash
-npm run dev
-```
+3. **Open your browser** and go to [http://localhost:3000](http://localhost:3000)
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+## Manual Setup
 
-## API Endpoints
+### Backend Setup
 
-The Next.js app communicates with the Go backend through these API routes:
+1. **Start the Go backend services**:
+   ```bash
+   # Terminal 1: Start the web server
+   go run cmd/web/main.go
+   
+   # Terminal 2: Start the storage service
+   go run cmd/storage/main.go
+   
+   # Terminal 3: Start the admin service
+   go run cmd/admin/main.go
+   ```
 
-- `GET /api/videos` - List all videos
-- `GET /api/videos/[id]` - Get specific video details
-- `POST /api/upload` - Upload a new video
-- `DELETE /api/delete/[id]` - Delete a video
-- `GET /api/content/[videoId]/[filename]` - Serve video content files
+### Frontend Setup
+
+1. **Navigate to the frontend directory**:
+   ```bash
+   cd frontend
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser** and go to [http://localhost:3000](http://localhost:3000)
+
+## Usage
+
+1. **Upload a video**: Use the upload form on the home page
+2. **View videos**: Browse the video grid to see all uploaded videos
+3. **Play videos**: Click on any video to start streaming
+4. **Delete videos**: Use the delete button on video cards or in the video player
 
 ## Project Structure
 
 ```
-src/
-├── app/
-│   ├── api/                    # API routes that proxy to Go backend
-│   ├── videos/[id]/           # Individual video page
-│   ├── layout.tsx             # Root layout with dark mode setup
-│   └── page.tsx               # Home page with upload and video grid
-├── components/
-│   ├── Navigation.tsx         # Navigation bar with dark mode toggle
-│   ├── UploadForm.tsx         # File upload form
-│   ├── VideoCard.tsx          # Individual video card component
-│   └── VideoPlayer.tsx        # DASH.js video player
-└── globals.css                # Global styles
+├── frontend/                 # Next.js frontend application
+├── cmd/                     # Go service entry points
+├── internal/                # Go backend services
+├── proto/                   # Protocol buffer definitions
+└── docker-compose.yml       # Docker setup for all services
 ```
 
 ## Technologies Used
 
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Utility-first CSS framework
-- **DASH.js** - Adaptive streaming video player
-- **React Hooks** - State management
+- **Frontend**: Next.js 14, TypeScript, Tailwind CSS, DASH.js
+- **Backend**: Go, gRPC, Protocol Buffers
+- **Storage**: File-based storage system
+- **Deployment**: Docker and Docker Compose
 
-## UI Components
+## Troubleshooting
 
-### Navigation
-- Fixed top navigation bar
-- TritonTube branding
-- Dark mode toggle button
-- Back button on video pages
-
-### Upload Form
-- Drag-and-drop file upload area
-- File size validation (10MB limit)
-- Upload progress indicator
-- Error handling
-
-### Video Grid
-- Responsive grid layout (1-4 columns based on screen size)
-- Video thumbnails with fallback icons
-- Hover effects with delete buttons
-- Empty state when no videos
-
-### Video Player
-- Full-width video player
-- DASH.js adaptive streaming
-- Video metadata display
-- Delete functionality
-
-## Dark Mode
-
-The application supports system preference-based dark mode with manual toggle. The dark mode uses YouTube-inspired colors:
-
-- Background: `#0F0F0F`
-- Sidebar: `#212121`
-- Hover: `#272727`
+- **Frontend not connecting to backend**: Make sure all Go services are running on their default ports
+- **Videos not loading**: Check that the storage service is running and accessible
+- **Upload failures**: Verify file size is under 10MB and format is supported
 
 ## Development
 
 To run in development mode:
 
 ```bash
+# Backend (in separate terminals)
+go run cmd/web/main.go
+go run cmd/storage/main.go
+go run cmd/admin/main.go
+
+# Frontend
+cd frontend
 npm run dev
 ```
-
-To build for production:
-
-```bash
-npm run build
-npm start
-```
-
-## Backend Integration
-
-This frontend is designed to work with the Go backend that provides:
-
-- Video metadata storage
-- Video content storage
-- DASH manifest generation
-- Thumbnail generation
-
-Make sure the Go backend is running on `localhost:8080` before starting the Next.js application.
