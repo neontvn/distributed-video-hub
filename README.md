@@ -1,5 +1,7 @@
 # Distributed Video Hub
 
+This project is an extension to a course project.
+
 A distributed video streaming and sharing platform built with Next.js frontend and Go backend.
 
 ## Features
