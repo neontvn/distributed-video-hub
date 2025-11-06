@@ -1,8 +1,36 @@
-# Distributed Video Hub
+<div align="center">
 
-This project is an extension to a course project.
+![StreamShare](frontend/src/app/streamshare.png)
 
-A distributed video streaming and sharing platform built with Next.js frontend and Go backend.
+# StreamShare
+
+</div>
+
+
+A distributed video streaming and sharing platform built with Next.js frontend and Golang backend.
+
+## Theory
+
+StreamShare implements a **microservices architecture** for distributed video streaming, addressing key challenges in scalable media platforms:
+
+### Key Concepts
+
+- **Microservices Architecture**: The system is decomposed into independent services (Web Server, Storage Service, Admin Service) that communicate via gRPC, enabling scalability and independent deployment.
+
+- **Adaptive Bitrate Streaming (DASH)**: Videos are encoded into multiple bitrate segments, allowing clients to dynamically select the best quality based on network conditions.
+
+- **Protocol Buffers & gRPC**: Efficient serialization and RPC framework for inter-service communication with strong typing and language interoperability.
+
+- **Distributed Storage**: Centralized storage service abstracts file management, allowing stateless web servers to handle concurrent requests.
+
+- **Service Discovery & Coordination**: Uses etcd for dynamic service registration and discovery in distributed environments.
+
+### Architecture Principles
+
+- **Separation of Concerns**: Each service has a single responsibility (API gateway, storage, administration)
+- **Statelessness**: Web servers maintain no persistent state, enabling horizontal scaling
+- **Asynchronous Communication**: Decoupled services communicate through well-defined protocols
+- **Fault Tolerance**: Individual service failures don't bring down the entire system
 
 ## Features
 
@@ -23,7 +51,7 @@ A distributed video streaming and sharing platform built with Next.js frontend a
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd distributed-video-hub
+   cd streamshare
    ```
 
 2. **Start all services with Docker Compose**:
@@ -77,9 +105,9 @@ A distributed video streaming and sharing platform built with Next.js frontend a
 
 ## Architecture
 
-The Distributed Video Hub uses a microservices architecture with the following components:
+StreamShare uses a microservices architecture with the following components:
 
-![Distributed Video Hub Architecture](frontend/src/app/architecture.png)
+![StreamShare Architecture](frontend/src/app/architecture.png)
 
 ### Components
 
