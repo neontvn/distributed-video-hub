@@ -75,14 +75,41 @@ A distributed video streaming and sharing platform built with Next.js frontend a
 3. **Play videos**: Click on any video to start streaming
 4. **Delete videos**: Use the delete button on video cards or in the video player
 
+## Architecture
+
+The Distributed Video Hub uses a microservices architecture with the following components:
+
+![Distributed Video Hub Architecture](frontend/src/app/architecture.png)
+
+### Components
+
+- **Frontend**: Next.js web application providing user interface
+- **Web Server**: Central API gateway handling client requests
+- **Storage Service**: Manages video files and adaptive streaming segments
+- **Admin Service**: Handles system administration and monitoring
+- **Database**: SQLite for metadata storage
+
 ## Project Structure
 
 ```
 ├── frontend/                 # Next.js frontend application
-├── cmd/                     # Go service entry points
-├── internal/                # Go backend services
-├── proto/                   # Protocol buffer definitions
-└── docker-compose.yml       # Docker setup for all services
+│   ├── src/
+│   │   ├── app/             # Next.js app router pages
+│   │   └── components/      # React components
+│   └── package.json
+├── cmd/                      # Go service entry points
+│   ├── web/                 # Web server
+│   ├── storage/             # Storage service
+│   └── admin/               # Admin service
+├── internal/                 # Go backend implementation
+│   ├── web/                 # Web server logic
+│   ├── storage/             # Storage logic
+│   └── proto/               # Generated Protocol Buffer code
+├── proto/                    # Protocol buffer definitions
+│   ├── storage.proto
+│   └── admin.proto
+├── docker-compose.yml        # Docker setup for all services
+└── Makefile                  # Build and run commands
 ```
 
 ## Technologies Used
